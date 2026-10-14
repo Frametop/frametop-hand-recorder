@@ -536,6 +536,8 @@ def shots(s, empty, data, live_session):
         s.problem("the testing session with the consent doesn't go to Before you start")
     s.scroll_to_text("What will happen")
     s.shoot("checklist-debug")
+    s.scroll_to_text("Your voice")
+    s.shoot("checklist-debug-voice")
     s.later(f'root.pickRound("{BOUNTY}")')
     s.wait_for(lambda: b.cameraState != "checking" and b.lightingMeasured != "Measuring…", 10)
     s.shoot_pages("checklist")

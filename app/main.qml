@@ -709,7 +709,8 @@ ApplicationWindow {
                     rings: rings.checked,
                     watch: watch.checked,
                     notes: notes.text,
-                    privacy: privacyOk
+                    privacy: privacyOk,
+                    voice: isDebug && voice.checked
                 }
             }
 
@@ -876,6 +877,20 @@ ApplicationWindow {
                 text: backend.cameraSummary + "\n" + backend.cameraEvidence
             }
 
+            SectionHeading { visible: checklist.isDebug; text: "Your voice" }
+            AppCheckBox {
+                id: voice
+                visible: checklist.isDebug
+                text: "Record my voice (optional)"
+            }
+            Hint {
+                visible: checklist.isDebug
+                text: "The headset's microphone records while you do: say what went wrong as it happens, e.g. "
+                      + "\"that opened the lazy susan, I didn't mean to\". We turn what you say into notes at "
+                      + "those moments. It's sent encrypted with the rest, for testing only. Leave it off if "
+                      + "other people can be heard."
+            }
+
             SectionHeading { text: "What will happen" }
             Label {
                 Layout.fillWidth: true
@@ -887,7 +902,8 @@ ApplicationWindow {
                         + "trouble. Frametop's hand tracking stays on, and what it made of your hands is recorded "
                         + "with the cameras.\n\n"
                         + "When the tracking gets something wrong, press the headset button at once: that marks "
-                        + "the moment (the panel flashes \"Marked\"). Hold the button to finish early.\n\n"
+                        + "the moment (the panel flashes \"Marked\"). Hold the button to finish early."
+                        + (voice.checked ? " Say what went wrong too: the microphone is recording." : "") + "\n\n"
                         + "Nothing leaves the headset. Afterwards you watch it in Review, delete anything you "
                         + "don't want to share, and only then export. It's sent encrypted, for testing only."
                       : "Press Start and close the dashboard. After a few seconds of your hands held up, windows "
