@@ -6,4 +6,5 @@ libfontconfig1
 libgl1
 libglib2.0-0t64
 libxkbcommon0
+python3-cryptography
 python3-venv

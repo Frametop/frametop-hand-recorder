@@ -39,10 +39,19 @@ put() {  # MODE SOURCE DEST (in the tree)
 put 755 "$built/build/ft-camd" hands/build/ft-camd
 put 755 "$built/build/ft-hands" hands/build/ft-hands
 put 755 "$built/rec/build/ft-handpanel" hands/rec/build/ft-handpanel
-# Frametop's recorder: the Python it runs, its texts, script and pose pictures, and the models
+# Frametop's recorder: the Python it runs, its texts, the bounty board and round scripts, the
+# testing session's script, the keys test uploads are encrypted to, the pose pictures, the
+# models, and the part it shares with the eye recorder (recorder/)
 put 644 "$ft/camcheck.py" hands/camcheck.py
-for f in ft_handrec.py session.py takes.py sides.py hub.py validate.py script.json CONSENT.md UPLOAD.md; do
+for f in ft_handrec.py session.py takes.py sides.py hub.py validate.py livelog.py script.json debug.json \
+         bounties.json CONSENT.md TESTING.md UPLOAD.md test-recipients.txt; do
   put 644 "$ft/rec/$f" "hands/rec/$f"
+done
+for f in "$ft"/rec/bounties/*.json; do
+  put 644 "$f" "hands/rec/bounties/$(basename "$f")"
+done
+for f in "$root"/frametop/recorder/*.py; do
+  put 644 "$f" "recorder/$(basename "$f")"
 done
 put 644 "$ft/rec/poses/poses.json" hands/rec/poses/poses.json
 for f in "$ft"/rec/poses/*.png; do

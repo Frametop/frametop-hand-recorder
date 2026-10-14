@@ -40,10 +40,12 @@ jobs:
       - name: Build and check the binaries
         run: scripts/build.sh
 
-      - name: Frametop's recorder tests (standard library)
+      - name: Frametop's recorder tests (standard library, and cryptography for the encrypted exports)
         run: |
           for t in frametop/hands/rec/tests/test_session.py frametop/hands/rec/tests/test_validate.py \
                    frametop/hands/rec/tests/test_sides.py frametop/hands/rec/tests/test_nohands.py \
+                   frametop/hands/rec/tests/test_bounties.py frametop/hands/rec/tests/test_debug.py \
+                   frametop/recorder/tests/test_age.py frametop/recorder/tests/test_bounties.py \
                    frametop/hands/tests/test_camcheck.py; do
             echo "== $t"; python3 "$t"
           done

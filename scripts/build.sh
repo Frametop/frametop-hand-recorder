@@ -18,11 +18,14 @@ JSONCPP_TAG=1.9.6   # as Fedora 44, which Frametop's dev container builds with
 [ -f "$root/frametop/hands/Makefile" ] || { echo "frametop/ is empty: git submodule update --init" >&2; exit 1; }
 [ "$(uname -m)" = aarch64 ] || { echo "build on aarch64 (the Frame's CPU), not $(uname -m)" >&2; exit 1; }
 
-# The panel's headers, at the commits Frametop's own build pins.
-pin() { sed -n "s/^$1=\([0-9A-Za-z.]*\)$/\1/p" "$root/frametop/hands/rec/build.sh" | head -1; }
-OPENVR_TAG=$(pin openvr)
-STB=$(pin stb)
-[ -n "$OPENVR_TAG" ] && [ -n "$STB" ] || { echo "can't read the openvr and stb pins from frametop/hands/rec/build.sh" >&2; exit 1; }
+# The panel's headers, at the commits Frametop's own build pins: OpenVR's tag and header sha256
+# in scripts/openvr.sh, stb's commit in hands/rec/build.sh.
+pin() { sed -n "s/^$1=\([0-9A-Za-z.]*\)$/\1/p" "$2" | head -1; }
+OPENVR_TAG=$(pin openvr_tag "$root/frametop/scripts/openvr.sh")
+OPENVR_SHA=$(sed -n 's/^openvr_fetch openvr\.h \([0-9a-f]\{64\}\)$/\1/p' "$root/frametop/scripts/openvr.sh" | head -1)
+STB=$(pin stb "$root/frametop/hands/rec/build.sh")
+[ -n "$OPENVR_TAG" ] && [ -n "$OPENVR_SHA" ] && [ -n "$STB" ] ||
+  { echo "can't read the openvr and stb pins from frametop/scripts/openvr.sh and frametop/hands/rec/build.sh" >&2; exit 1; }
 
 echo "== sources: frametop $(git -C "$root/frametop" describe --always --tags --dirty 2>/dev/null || echo unknown)"
 mkdir -p "$src"
@@ -59,6 +62,8 @@ fetch() {  # URL FILE, once
   mv -f "$2.part" "$2"
 }
 fetch "https://raw.githubusercontent.com/ValveSoftware/openvr/$OPENVR_TAG/headers/openvr.h" "$pdeps/openvr.h"
+echo "$OPENVR_SHA  $pdeps/openvr.h" | sha256sum -c --status ||
+  { echo "openvr.h from openvr $OPENVR_TAG doesn't match Frametop's pinned sha256" >&2; rm -f "$pdeps/openvr.h"; exit 1; }
 # The link-time stand-in: it has no SONAME, so the binary needs plain libopenvr_api.so, which the
 # rpath finds in SteamVR (whose copy has no SONAME either).
 fetch "https://raw.githubusercontent.com/ValveSoftware/openvr/$OPENVR_TAG/bin/linuxarm64/libopenvr_api.so" \

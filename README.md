@@ -1,20 +1,22 @@
 # Frametop Hand Recorder
 
-Record your hands with a Steam Frame for Frametop's open hand dataset ([DeeJanuz/frametop-hands](https://huggingface.co/datasets/DeeJanuz/frametop-hands) on Hugging Face), without installing [Frametop](https://github.com/DeeJanuz/frametop). The recordings help train a hand tracking model for the Frame's cameras.
+Record your hands with a Steam Frame to help Frametop's hand tracking, without installing [Frametop](https://github.com/Frametop/frametop). If you already run Frametop, stable or experimental, this works next to it as its own app.
 
-The recorder runs in SteamVR's dashboard. A panel in the headset guides you through hand poses, gestures, typing, objects and a few moves, while the headset's tracking cameras record. Afterwards you watch what was recorded, delete anything you don't want to share, export it, and upload it as a pull request from your own Hugging Face account. Nothing leaves the headset until you press Upload.
+The recorder runs in SteamVR's dashboard. You pick a **bounty**: a short round, about 4 minutes, of what the hand tracker needs most right now. Windows appear in front of you in the headset and you tap, pinch and grab them as you would real ones (index taps, middle-finger taps, pinches, three-finger card grabs), while the headset's tracking cameras record your hands. Afterwards you watch what was recorded, delete anything you don't want to share, export it, and upload it as a pull request from your own Hugging Face account. Nothing leaves the headset until you press Upload.
 
-While you record, the dashboard stays closed. Use the button on the right side of the headset: press it to start each step or to pause, press it twice to record a step again, and hold it to stop.
+**With Frametop installed** there's also a **testing session**: up to 3 minutes of using Frametop as you always do, while the cameras record your hands and what Frametop's hand tracking made of them. When the tracking gets something wrong, press the headset button: that marks the moment. New versions of the hand tracking are then tested on your recording, at those moments, before they ship.
 
-**Status:** not released yet. A test build is out as a pre-release, [v0.1.0-rc1](https://github.com/Frametop/frametop-hand-recorder/releases/tag/v0.1.0-rc1), and hasn't been tried in the headset yet. To install it, use this command in step 2 below:
+While you record, the dashboard stays closed. Use the button on the right side of the headset: press it to start each step, press it twice to record a step again, and hold it to stop. In a testing session, a press marks a moment and a hold finishes.
+
+**Status: testing.** This is a test build, [v0.2.0-rc1](https://github.com/Frametop/frametop-hand-recorder/releases/tag/v0.2.0-rc1). For now everything you upload goes to a separate, gated test dataset ([DeeJanuz/frametop-hands-test](https://huggingface.co/datasets/DeeJanuz/frametop-hands-test)), **encrypted on your headset** so that only the maintainer can open it. It's used to test the recorder and the hand tracking, never for training, and isn't published. The recorder shows the short testing consent before your first round. To install the test build, use this command in step 2 below:
 ```
-curl -fsSL https://github.com/Frametop/frametop-hand-recorder/releases/download/v0.1.0-rc1/get-hand-recorder.sh | bash
+curl -fsSL https://github.com/Frametop/frametop-hand-recorder/releases/download/v0.2.0-rc1/get-hand-recorder.sh | bash
 ```
 Please report what works and what doesn't in this repo's [issues](https://github.com/Frametop/frametop-hand-recorder/issues) or the [Frametop Discord](https://discord.gg/W3X9f7z3Bc).
 
 ## Install
 
-You need a Steam Frame with SteamOS and SteamVR, about 1.2 GB free for the install, and about 10 GB for each round of recording.
+You need a Steam Frame with SteamOS and SteamVR, about 1.2 GB free for the install, and about 30 GB for each round of recording and its export (you can delete both once it's uploaded).
 
 1. In the headset, open the dashboard, then **Launch a program** → **Konsole**.
 2. Run:
@@ -28,7 +30,7 @@ Run the same command again to update.
 
 ### What the installer changes
 
-- It installs into `~/.local/share/frametop-hand-recorder`: the release in `versions/`, with `current` pointing at the one in use, and a Python environment in `venv/` with PySide6 and huggingface_hub from PyPI, pinned with hashes in `requirements.txt`.
+- It installs into `~/.local/share/frametop-hand-recorder`: the release in `versions/`, with `current` pointing at the one in use, and a Python environment in `venv/` with PySide6, huggingface_hub and cryptography from PyPI, pinned with hashes in `requirements.txt`.
 - It gives the camera broker `ft-camd` three file capabilities with `sudo setcap`: `cap_sys_ptrace`, `cap_perfmon` and `cap_dac_read_search`. ft-camd copies the camera images from SteamVR's camera service, read-only, and drops the capabilities once it has set up. This is the only step that needs your password.
 - It adds the menu entry `~/.local/share/applications/frametop-hand-recorder.desktop`.
 - Recordings go to `~/.local/share/frametop/hands/contrib`, the same folder Frametop's own recorder uses. Your Hugging Face login, once you make one, goes to `~/.cache/huggingface/token`.
@@ -43,7 +45,7 @@ This runs the install's own copy of the installer. It removes the install, its P
 
 ## How it fits together
 
-The recorder is Frametop's: the session runner, the review and export code, the camera broker `ft-camd`, the tracker `ft-hands` and the headset panel `ft-handpanel` all live in [Frametop's `hands/`](https://github.com/DeeJanuz/frametop/tree/main/hands) (see `hands/rec/DESIGN.md` there). This repo pins Frametop as the `frametop/` submodule and adds what the standalone recorder needs:
+The recorder is Frametop's: the session runner, the review and export code, the camera broker `ft-camd`, the tracker `ft-hands` the headset panel `ft-handpanel`, the bounty board and the testing session all live in [Frametop's `hands/`](https://github.com/Frametop/frametop/tree/main/hands) (see `hands/rec/DESIGN.md` there). This repo pins Frametop as the `frametop/` submodule and adds what the standalone recorder needs:
 
 | Here | What it is |
 |---|---|
@@ -88,7 +90,7 @@ Leave out `frame-job --local --` on a machine without frame-job.
 
 1. Move the submodule to the Frametop commit to ship, and push.
 2. Tag `vX.Y.Z` and push the tag. CI builds it and makes a draft release, a pre-release if the tag has a `-` (`v0.2.0-rc1`).
-3. Install the draft's tarball on a Frame with `--from`, and record a quick round.
+3. Install the draft's tarball on a Frame with `--from`, and record a bounty (and, with Frametop installed, a testing session).
 4. Publish the release. `releases/latest/download/get-hand-recorder.sh` then points at it.
 
 ## License

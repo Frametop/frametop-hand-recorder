@@ -69,6 +69,7 @@ def make_safe():
 
 
 FREE = {"bytes": 120 * 1000 ** 3}
+BOUNTY = "pinches"   # the bounty the shots pick
 
 
 class DummySession:
@@ -377,6 +378,19 @@ def session_states(s):
             note="Check the light, and that nothing covers the cameras.")),
         ("session-paused", fake_status(state="paused", prompt="Paused", mode="auto", step_index=0)),
     ]
+    # A bounty's step, and the testing session while it records (the panel hidden, a mark made).
+    states += [
+        ("session-bounty", fake_status(
+            state="running", section="taps", title="Index taps", section_index=2, section_count=6, step_index=3,
+            step_count=8, take="02-taps", big="Go", seconds_left=11.2,
+            prompt="Right hand, palm away, arm straight: tap the lit buttons\nHalfway: bend your arm",
+            hands={"left": None, "right": "seen"})),
+        ("session-debug", fake_status(
+            state="running", section="free", title="Testing session", section_index=1, section_count=1,
+            step_index=1, step_count=1, take="01-free", big="", seconds_left=163.0, debug=True, marks=2,
+            can_redo=False, prompt="Use Frametop as you normally would.\nThis panel goes away while you record. "
+            "Press the headset button when something goes wrong; hold it to finish.")),
+    ]
     for name, status in states:
         b._on_status(status)
         s.shoot(name, settle=500)
@@ -389,18 +403,18 @@ def session_states(s):
 
 
 def dry_run_session(s):
-    """A real dry-run session (Session(dry_run=True): no processes, no units, no camera check),
-    stepped through for a few states, then stopped."""
+    """A real dry-run bounty round (Session(dry_run=True): no processes, no units, no camera
+    check), stepped through for a few states, then stopped."""
     b = s.backend
-    answers = {"objects": ["pencil", "phone"], "own_objects": [], "controllers": "none", "sleeves": "short",
+    answers = {"objects": [], "own_objects": [], "controllers": "none", "sleeves": "short",
                "rings": False, "watch": False, "notes": "", "privacy": True}
-    if not b.startSession(answers, "auto", False, True):
+    if not b.startSession(answers, "auto", False, False, BOUNTY):
         s.problem("the dry-run session didn't start")
         return
     s.later("root.show(sessionPage)")
     seen, nexts = set(), 0
     end = time.monotonic() + 40
-    while time.monotonic() < end and len(seen) < 6:
+    while time.monotonic() < end and len(seen) < 5:
         st = dict(b.status)
         key = (st.get("state"), bool(st.get("strip")))
         if key not in seen and st.get("state") not in (None, "starting"):
@@ -410,8 +424,8 @@ def dry_run_session(s):
         if st.get("waiting"):
             nexts += 1
             b.nextStep()
-            if nexts % 3 == 0 and not st.get("strip"):
-                b.skipSection()     # on to the poses' strips
+            if nexts % 3 == 0:
+                b.skipSection()
         s.wait(60)
     s.show("checklist")
     s.shoot("checklist-session-running")
@@ -430,6 +444,7 @@ def run(base, out=None, log=print, live_session=True):
     os.environ.setdefault("QT_QUICK_BACKEND", "software")
     if os.path.isdir(base) and set(os.listdir(base)) - {"empty", "data"}:
         raise SystemExit(f"refusing to empty {base}: it holds more than this script's scratch folders")
+    os.environ["FT_HANDREC_FRAMETOP_HANDS"] = "1"   # the board shows the testing session
     make_safe()
     shutil.rmtree(base, ignore_errors=True)
     empty, data = os.path.join(base, "empty"), os.path.join(base, "data")
@@ -445,10 +460,14 @@ def run(base, out=None, log=print, live_session=True):
 
 
 def shots(s, empty, data, live_session):
-    # 1. Nothing yet: the consent first.
+    # 1. Nothing yet: the board, then the consent once a round is picked.
     s.load(empty)
+    if s.js("pageStack.currentItem.title") != "Bounties":
+        s.problem("an empty base doesn't open on Bounties")
+    s.shoot_pages("bounties", limit=2)
+    s.later(f'root.pickRound("{BOUNTY}")')
     if s.js("pageStack.currentItem.title") != "Welcome":
-        s.problem("an empty base doesn't open on Welcome")
+        s.problem("picking a bounty before the consent doesn't go to Welcome")
     s.shoot_pages("welcome-consent", limit=2)
     s.scroll(10 ** 6)
     s.shoot("welcome-consent-end")
@@ -462,10 +481,13 @@ def shots(s, empty, data, live_session):
     b = s.backend
     if s.js("pageStack.currentItem.title") != "Review":
         s.problem("--page review doesn't open on Review before the consent")
-    # The profile agreed to an older CONSENT.md: Welcome asks again, keeping the contributor id.
-    s.show("welcome")
+    # The profile agreed to an older CONSENT.md, never to TESTING.md: picking a bounty asks for
+    # the testing consent, keeping the contributor id.
+    s.later(f'root.pickRound("{BOUNTY}")')
+    if s.js("pageStack.currentItem.title") != "Welcome":
+        s.problem("a bounty without the testing consent doesn't go to Welcome")
     s.scroll(10 ** 6)
-    s.shoot("welcome-changed-end")
+    s.shoot("welcome-testing-end")
     b.acceptConsent(True, True, True, "right")
     s.wait(100)
     s.js("toast.opacity = 0")   # its "Thank you" would cover the next shots
@@ -473,7 +495,15 @@ def shots(s, empty, data, live_session):
     s.scroll(10 ** 6)
     s.shoot("welcome-agreed-end")
 
-    s.show("checklist")
+    s.show("bounties")
+    s.shoot("bounties-agreed")
+    s.later('root.pickRound("debug")')
+    s.wait_for(lambda: b.cameraState != "checking" and b.lightingMeasured != "Measuring…", 10)
+    if s.js("pageStack.currentItem.title") != "Before you start":
+        s.problem("the testing session with the consent doesn't go to Before you start")
+    s.scroll_to_text("What will happen")
+    s.shoot("checklist-debug")
+    s.later(f'root.pickRound("{BOUNTY}")')
     s.wait_for(lambda: b.cameraState != "checking" and b.lightingMeasured != "Measuring…", 10)
     s.shoot_pages("checklist")
     b._camera = {"status": "degraded", "reason": "slam_upper_left, slam_upper_right not streaming",

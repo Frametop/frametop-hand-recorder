@@ -1,5 +1,6 @@
 // The Hand Recorder's window for SteamVR's dashboard: Qt Quick Controls (Basic style), no
-// Kirigami. A port of frametop/hands/rec/main.qml with the same pages, backend calls and texts,
+// Kirigami. A port of frametop/hands/rec/main.qml with the same pages, backend calls and texts
+// (bounties and the testing session only: no full session or quick round),
 // reworded where the person is in the headset using the dashboard. It runs as a fixed panel of
 // about 1280x800, clicked with a controller's laser pointer, usually with no keyboard.
 // Backend: ft_handrec.py ("backend", started with --qml this file --style Basic); frame sets
@@ -47,6 +48,12 @@ ApplicationWindow {
 
     // The session chosen on the Export page, for the Upload page.
     property string chosenSession: ""
+    // The round picked on the Bounties page: a bounty's id, or the testing session's ("debug").
+    // roundPicked: something was picked (else Welcome's Continue goes to Bounties).
+    property string chosenBounty: ""
+    property bool roundPicked: false
+    // "Export and upload" on the Session page: once the export is done, the Upload page.
+    property bool sendAfterExport: false
     // The navigation entry shown as the current page (Takes and the viewer count as Review).
     property var navPage: null
 
@@ -113,13 +120,22 @@ ApplicationWindow {
         pageStack.push(page)
     }
 
-    // --page welcome|checklist|session|review|export|upload opens the app on that page; the
-    // Welcome page comes first until the consent is agreed to.
+    // A round picked on the Bounties page: the consent first if it isn't agreed to yet, then
+    // Before you start (the camera check, the privacy checks), then Start. The consent asked for
+    // follows the round: while the bounties are tested, the testing one (TESTING.md).
+    function pickRound(bounty) {
+        chosenBounty = bounty
+        roundPicked = true
+        backend.setConsentKind(backend.roundConsentKind(bounty))
+        show(backend.needsConsent ? welcomePage : checklistPage)
+    }
+
+    // --page bounties|welcome|checklist|session|review|export|upload opens the app on that page;
+    // it opens on Bounties. Pages that record or send need the consent: they lead to Welcome.
     function firstPage() {
-        if (backend.needsConsent && startPage !== "review")
-            return welcomePage
-        return ({ welcome: welcomePage, checklist: checklistPage, session: sessionPage, review: reviewPage,
-                  export: exportPage, upload: uploadPage })[startPage] || checklistPage
+        return ({ welcome: welcomePage, checklist: backend.needsConsent ? welcomePage : checklistPage,
+                  session: sessionPage, review: reviewPage, export: exportPage,
+                  upload: uploadPage })[startPage] || bountiesPage
     }
     Component.onCompleted: show(firstPage())
 
@@ -127,6 +143,13 @@ ApplicationWindow {
         target: backend
         function onMessage(text, isError) {
             root.notify(text, isError)
+        }
+        function onExportDone(session, ok) {
+            if (root.sendAfterExport && session === root.chosenSession) {
+                root.sendAfterExport = false
+                if (ok)
+                    root.show(uploadPage)
+            }
         }
     }
 
@@ -191,6 +214,7 @@ ApplicationWindow {
                 color: Theme.text
                 wrapMode: Text.Wrap
             }
+            NavButton { text: "Bounties"; page: bountiesPage }
             NavButton { text: "Welcome"; page: welcomePage }
             NavButton { text: "Before you start"; page: checklistPage; enabled: !backend.needsConsent }
             NavButton { text: "Session"; page: sessionPage; enabled: !backend.needsConsent }
@@ -383,6 +407,116 @@ ApplicationWindow {
         }
     }
 
+    // ---------------------------------------------------------------- Bounties
+    Component {
+        id: bountiesPage
+        ScrollPage {
+            title: "Bounties"
+            tools: [
+                AppButton {
+                    text: "Get the newest board"
+                    enabled: backend.boardFetch.state !== "fetching" && !backend.hubDryRun
+                    onClicked: backend.refreshBoard()
+                }
+            ]
+            banners: [
+                DraftBanner { },
+                Banner {
+                    header: true
+                    visible: backend.runnerError !== ""
+                    type: "error"
+                    text: backend.runnerError
+                },
+                Banner {
+                    header: true
+                    visible: backend.sessionActive
+                    type: "info"
+                    text: "A session is running."
+                    actions: [ AppButton { text: "Go to it"; onClicked: root.show(sessionPage) } ]
+                },
+                Banner {
+                    header: true
+                    visible: backend.boardFetch.state === "error" || backend.boardFetch.state === "ok"
+                    type: backend.boardFetch.state === "ok" ? "positive" : "info"
+                    text: backend.boardFetch.text || ""
+                }
+            ]
+
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: "Each bounty is a short round, about 4 minutes, of what the hand tracker needs most. "
+                      + "Windows appear in front of you in the headset and you tap, pinch and grab them as you "
+                      + "would real ones, while the cameras record your hands. The most wanted come first, and "
+                      + "you can do one again. Afterwards you look over the recording and send it "
+                      + (backend.roundConsentKind("bounty") === "testing"
+                         ? "in: while the bounties are being tested, to a test dataset, for testing only."
+                         : "to the hand dataset.") + (backend.boardUpdated ? " (Board of " + backend.boardUpdated + ".)" : "")
+            }
+
+            PlaceholderMessage {
+                Layout.fillWidth: true
+                Layout.topMargin: 80
+                visible: bountyRows.count === 0
+                text: "No bounties"
+                explanation: "The board that came with the recorder is missing (hands/rec/bounties.json)."
+            }
+
+            Repeater {
+                id: bountyRows
+                model: backend.bounties
+
+                ListRow {
+                    id: bountyRow
+                    required property var modelData
+                    enabled: modelData.available === "" && !backend.sessionActive
+                    onClicked: root.pickRound(modelData.id)
+
+                    contentItem: RowLayout {
+                        spacing: Theme.largeSpacing
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+                            Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.Wrap
+                                font.bold: true
+                                color: Theme.text
+                                text: bountyRow.modelData.title
+                                      + (bountyRow.modelData.priority === "high" ? " · wanted most"
+                                         : bountyRow.modelData.priority === "low" ? " · low priority" : "")
+                                      + (bountyRow.modelData.done === 1 ? " · done"
+                                         : bountyRow.modelData.done > 1 ? " · done " + bountyRow.modelData.done + " times" : "")
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.Wrap
+                                color: Theme.text
+                                text: bountyRow.modelData.blurb
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.Wrap
+                                color: Theme.dimText
+                                font.pixelSize: Theme.smallFontSize
+                                text: [bountyRow.modelData.minutesText,
+                                       bountyRow.modelData.lastText ? "last done " + bountyRow.modelData.lastText : "",
+                                       bountyRow.modelData.available].filter(s => s !== "").join(" · ")
+                            }
+                        }
+                        AppButton {
+                            text: bountyRow.modelData.done > 0 ? "Record again" : "Record"
+                            highlighted: bountyRow.modelData.done === 0
+                            Layout.preferredWidth: 200
+                            enabled: bountyRow.enabled
+                            onClicked: bountyRow.clicked()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- Welcome
     Component {
         id: welcomePage
@@ -409,7 +543,7 @@ ApplicationWindow {
                 onClicked: backend.copy(backend.contributor)
             }
             Banner {
-                visible: backend.needsConsent && backend.contributor !== ""
+                visible: backend.needsConsent && backend.consentAccepted !== ""
                 type: "info"
                 text: "This text changed since you last agreed to it. Please read it again; your contributor id stays the same."
             }
@@ -450,14 +584,14 @@ ApplicationWindow {
                 onClicked: {
                     backend.acceptConsent(adult.checked, region.checked, agree.checked, handed.currentValue)
                     if (!backend.needsConsent)
-                        root.show(checklistPage)
+                        root.show(root.roundPicked ? checklistPage : bountiesPage)
                 }
             }
             AppButton {
                 visible: !backend.needsConsent
                 highlighted: true
                 text: "Continue"
-                onClicked: root.show(checklistPage)
+                onClicked: root.show(root.roundPicked ? checklistPage : bountiesPage)
             }
         }
     }
@@ -469,20 +603,24 @@ ApplicationWindow {
             id: checklist
             title: "Before you start"
             readonly property bool privacyOk: privacy1.checked && privacy2.checked && privacy3.checked
-            readonly property bool ready: privacyOk && backend.diskOk
+            // The round picked on the Bounties page: a bounty's id, or the testing session's.
+            readonly property string bountyId: root.chosenBounty
+            readonly property bool isDebug: bountyId === "debug"
+            readonly property var bounty: {
+                for (const b of backend.bounties)
+                    if (b.id === bountyId)
+                        return b
+                return null
+            }
+            readonly property bool ready: privacyOk && backend.diskOk && bounty !== null
                                           && backend.runnerError === "" && !backend.sessionActive
 
+            // The bounties use no objects and no controllers.
             function answers() {
-                const objects = []
-                for (let i = 0; i < objectBoxes.count; ++i) {
-                    const box = objectBoxes.itemAt(i)
-                    if (box.checked)
-                        objects.push(box.value)
-                }
                 return {
-                    objects: objects,
-                    own_objects: ownObjects.text.split(",").map(s => s.trim()).filter(s => s !== ""),
-                    controllers: straps.checked ? "straps" : "none",
+                    objects: [],
+                    own_objects: [],
+                    controllers: "none",
                     sleeves: sleeves.currentValue,
                     rings: rings.checked,
                     watch: watch.checked,
@@ -512,43 +650,23 @@ ApplicationWindow {
             ]
             Component.onCompleted: backend.checkCameras()
 
-            SectionHeading { text: "Within reach"; Layout.topMargin: 0 }
+            SectionHeading { text: "Round"; Layout.topMargin: 0 }
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
-                text: "Put these on the desk or table in front of you. Untick what you don't have; "
-                      + "the session skips those."
-            }
-            FieldLabel { text: "Objects" }
-            Repeater {
-                id: objectBoxes
-                model: backend.objects
-                AppCheckBox {
-                    required property var modelData
-                    readonly property string value: modelData.value
-                    text: modelData.text
-                    checked: true
-                }
-            }
-            FieldLabel { text: "Your own" }
-            AppTextField {
-                id: ownObjects
-                Layout.fillWidth: true
-                placeholderText: "other things you use, separated by commas"
-            }
-
-            SectionHeading { text: "Controllers" }
-            FieldLabel { text: "Ergonomic Kit straps" }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacing
-                AppRadioButton { id: straps; text: "Yes, I have the controllers with the straps" }
-                AppRadioButton { text: "No"; checked: true }
+                font.bold: true
+                color: Theme.text
+                text: checklist.bounty ? checklist.bounty.title : "No round picked yet"
             }
             Hint {
-                text: "With the straps, the controllers stay on your hands while your fingers move freely. "
-                      + "The controllers' tracking then says exactly where your hands are, which teaches the "
-                      + "model how far away a hand is. Without them, the two controller sections are skipped."
+                text: checklist.bounty ? checklist.bounty.blurb
+                      : checklist.bountyId ? "This recorder doesn't have that bounty."
+                      : "Pick a bounty to record on the Bounties page."
+            }
+            AppButton {
+                text: checklist.bounty ? "Pick another…" : "Pick a bounty…"
+                enabled: !backend.sessionActive
+                onClicked: root.show(bountiesPage)
             }
 
             SectionHeading { text: "Light" }
@@ -570,7 +688,8 @@ ApplicationWindow {
             }
             Hint {
                 text: "Each round in a different light helps the most: dim, a normal room, daylight. The cameras "
-                      + "tell daylight from indoor light themselves; to say dim or a normal room, pick it here."
+                      + "can't tell daylight on their own (a sunlit room has measured as indoor light), so if "
+                      + "sunlight comes into the room, pick Daylight here; dim or a normal room the same way."
             }
             Banner {
                 visible: backend.lightingNote !== ""
@@ -624,7 +743,7 @@ ApplicationWindow {
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
-                text: backend.freeText + " (a round takes about 10 GB)"
+                text: backend.freeText + " (a round takes about 15 GB, and its export about 12 GB more)"
             }
             Banner {
                 visible: !backend.diskOk
@@ -677,43 +796,29 @@ ApplicationWindow {
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
-                text: "After you press Start, a panel in the headset shows each step: a picture of the hand pose, "
-                      + "where to hold your hands, and what to do. You can close the dashboard while you record. "
-                      + "The sections: hand poses, gestures, typing and the mouse, your objects, touching a dot, "
-                      + "and moves with the controllers on and off. Each section is recorded as one take. In the "
-                      + "pose steps your hands keep moving while a row of pictures lights up one shape after "
-                      + "another: follow it.\n\n"
-                      + "Each step waits until you're ready: press the button on the right side of the headset, "
-                      + "or Next on the Session page. A 3-2-1 countdown follows, then hold the pose until the bar "
-                      + "runs out. Nothing is recorded while a step waits. The headset button also pauses and "
-                      + "resumes a recording. Press it twice to record a step again, or hold it to stop. To skip "
-                      + "a section, open the dashboard again and use the buttons on the Session page. If a "
-                      + "keyboard is connected, this window's "
-                      + "keys work too: Space next, P pause, R record the last step again, S skip a section, "
-                      + "Esc stop.\n\n"
-                      + "Nothing leaves the headset. Afterwards you watch the takes in Review, delete anything "
-                      + "you don't want to share, and only then export."
-            }
-            FieldLabel { text: "Round" }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacing
-                AppRadioButton {
-                    id: fullRound
-                    text: "Full session"
-                    checked: !backend.hasFullSession
-                }
-                AppRadioButton {
-                    id: quickRound
-                    text: "Quick round (about 3 min): hand size, poses, the dot, no hands"
-                    checked: backend.hasFullSession
-                }
-            }
-            Banner {
-                visible: backend.hasFullSession
-                type: "info"
-                text: "You've recorded a full session already. A quick round in a different light (dim, "
-                      + "daylight) adds the most now."
+                text: checklist.isDebug
+                      ? "Press Start and close the dashboard. Press the button on the right side of the headset "
+                        + "to start recording: after a 3-2-1 the panel goes away, and you use Frametop as you "
+                        + "always do for up to 3 minutes: point, tap, pinch, drag, scroll. Do what gives you "
+                        + "trouble. Frametop's hand tracking stays on, and what it made of your hands is recorded "
+                        + "with the cameras.\n\n"
+                        + "When the tracking gets something wrong, press the headset button at once: that marks "
+                        + "the moment (the panel flashes \"Marked\"). Hold the button to finish early.\n\n"
+                        + "Nothing leaves the headset. Afterwards you watch it in Review, delete anything you "
+                        + "don't want to share, and only then export. It's sent encrypted, for testing only."
+                      : "Press Start and close the dashboard. After a few seconds of your hands held up, windows "
+                        + "appear in front of you, and a band along the top says what to do. Do it as you would "
+                        + "on a real window: tap the lit button, pinch the lit corner, grab the lit edge. The "
+                        + "windows don't move or click; a ghost outline shows where to take one, and your hand "
+                        + "goes there as if it came along. Some steps ask you to stop short or touch without "
+                        + "grabbing: those count just as much.\n\n"
+                        + "Each step waits until you're ready: press the button on the right side of the headset, "
+                        + "or Next on the Session page. The windows appear where you're facing when you press it. "
+                        + "Press it twice to record a step again, or hold it to stop. If a keyboard is connected, "
+                        + "this window's keys work too: Space next, P pause, R record the last step again, Esc "
+                        + "stop.\n\n"
+                        + "Nothing leaves the headset. Afterwards you watch the takes in Review, delete anything "
+                        + "you don't want to share, and only then export."
             }
             FieldLabel { text: "Pace" }
             AppCheckBox {
@@ -724,7 +829,8 @@ ApplicationWindow {
                 text: (autoAdvance.checked
                        ? "Each step shows for a few seconds and the next follows by itself. Quicker if you "
                          + "know the steps already. "
-                       : "") + "Length: " + backend.planText(checklist.answers(), autoAdvance.checked, quickRound.checked) + "."
+                       : "") + "Length: " + backend.planText(checklist.answers(), autoAdvance.checked, false,
+                                                         checklist.bountyId) + "."
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -737,13 +843,14 @@ ApplicationWindow {
                     enabled: checklist.ready && !backend.camerasBlockStart && !backend.restartingSteamVR
                     onClicked: {
                         if (backend.startSession(checklist.answers(), lighting.currentValue, autoAdvance.checked,
-                                                 quickRound.checked))
+                                                 false, checklist.bountyId))
                             root.show(sessionPage)
                     }
                 }
                 Hint {
                     visible: (!checklist.ready || backend.camerasBlockStart) && !backend.sessionActive
-                    text: !checklist.privacyOk ? "Tick the three privacy checks to start."
+                    text: !checklist.bounty ? "Pick a bounty first."
+                          : !checklist.privacyOk ? "Tick the three privacy checks to start."
                           : backend.camerasBlockStart ? "The headset's cameras aren't all running: see the message at the top." : ""
                 }
             }
@@ -924,6 +1031,11 @@ ApplicationWindow {
                 enabled: backend.sessionActive
                 onActivated: backend.stopSession()
             }
+            Shortcut {
+                sequence: "M"
+                enabled: backend.sessionActive && !!sessionView.st.debug
+                onActivated: backend.markMoment()
+            }
 
             banners: [
                 Banner {
@@ -944,9 +1056,9 @@ ApplicationWindow {
                 width: parent.width - 160
                 visible: sessionView.runState === ""
                 text: "No session yet"
-                explanation: "Go through Before you start, then press Start there."
-                actionText: "Before you start"
-                onTriggered: root.show(checklistPage)
+                explanation: "Pick a bounty, go through Before you start, then press Start there."
+                actionText: "Bounties"
+                onTriggered: root.show(bountiesPage)
             }
 
             ColumnLayout {
@@ -1153,7 +1265,13 @@ ApplicationWindow {
                     wrapMode: Text.Wrap
                     color: Theme.dimText
                     font.pixelSize: Theme.smallFontSize
-                    text: "The steps appear on a panel in the headset: close the dashboard to record. "
+                    text: sessionView.st.debug
+                          ? "Close the dashboard to record; the panel in the headset hides while you do. "
+                            + (sessionView.st.button ? "The button on the right side of the headset: next; while "
+                               + "recording, press it to mark a moment the tracking got wrong, hold it to finish. " : "")
+                            + "With a keyboard connected: Space: next · M: mark · P: pause or resume · Esc: stop. "
+                            + "Stopping keeps what's recorded so far."
+                          : "The steps appear on a panel in the headset: close the dashboard to record. "
                           + (sessionView.st.button ? "The button on the right side of the headset: "
                              + (sessionView.stepMode ? "next, " : "") + "pause or resume; twice: record the "
                              + "last step again; hold: stop. To skip a section, open the dashboard again and use the "
@@ -1171,8 +1289,8 @@ ApplicationWindow {
                     AppButton {
                         visible: !backend.sessionActive
                         focusPolicy: Qt.NoFocus
-                        text: "New session…"
-                        onClicked: root.show(checklistPage)
+                        text: "Another round…"
+                        onClicked: root.show(bountiesPage)
                     }
                     AppButton {
                         visible: backend.sessionActive
@@ -1182,14 +1300,28 @@ ApplicationWindow {
                         onClicked: backend.togglePause()
                     }
                     AppButton {
-                        visible: backend.sessionActive
+                        visible: backend.sessionActive && !!sessionView.st.debug
+                        enabled: sessionView.runState === "running"
+                        focusPolicy: Qt.NoFocus
+                        text: "Mark" + (sessionView.st.marks ? " · " + sessionView.st.marks : "")
+                        onClicked: backend.markMoment()
+                    }
+                    AppButton {
+                        visible: backend.sessionActive && !!sessionView.st.debug
+                        enabled: sessionView.runState === "running"
+                        focusPolicy: Qt.NoFocus
+                        text: "Finish"
+                        onClicked: backend.finishSession()
+                    }
+                    AppButton {
+                        visible: backend.sessionActive && !sessionView.st.debug
                         enabled: !!sessionView.st.can_redo
                         focusPolicy: Qt.NoFocus
                         text: "Redo step"
                         onClicked: backend.redo()
                     }
                     AppButton {
-                        visible: backend.sessionActive
+                        visible: backend.sessionActive && !sessionView.st.debug
                         focusPolicy: Qt.NoFocus
                         text: "Skip section"
                         onClicked: backend.skipSection()
@@ -1200,6 +1332,18 @@ ApplicationWindow {
                         text: "Stop"
                         Layout.preferredWidth: 150
                         onClicked: backend.stopSession()
+                    }
+                    AppButton {
+                        visible: !backend.sessionActive && backend.sessionId !== "" && !backend.exporting
+                        focusPolicy: Qt.NoFocus
+                        highlighted: true
+                        text: "Export and upload"
+                        onClicked: {
+                            root.chosenSession = backend.sessionId
+                            root.sendAfterExport = true
+                            backend.exportSession(backend.sessionId, false)
+                            root.show(exportPage)
+                        }
                     }
                     AppButton {
                         visible: !backend.sessionActive && backend.sessionId !== ""
@@ -1634,6 +1778,12 @@ ApplicationWindow {
                 DraftBanner { },
                 Banner {
                     header: true
+                    visible: root.sendAfterExport
+                    type: "info"
+                    text: "Exporting your session: the Upload page follows by itself once it's done."
+                },
+                Banner {
+                    header: true
                     visible: exportView.worn && backend.exporting
                     type: "info"
                     text: "Exporting keeps the processor busy for a few minutes, so VR may stutter a little until "
@@ -1698,7 +1848,7 @@ ApplicationWindow {
                 AppButton {
                     visible: backend.exporting
                     text: "Cancel"
-                    onClicked: backend.cancelExport()
+                    onClicked: { root.sendAfterExport = false; backend.cancelExport() }
                 }
             }
             FieldLabel { text: "Progress"; visible: backend.exporting }
@@ -1778,7 +1928,7 @@ ApplicationWindow {
                 if (backend.exporting) return "Wait for the export to finish"
                 if (backend.uploading) return ""
                 if (backend.hubDryRun) return ""
-                if (!backend.uploadAllowed) return "Contributions aren't open yet"
+                if (!backend.uploadAllowedFor(session)) return "Contributions aren't open yet"
                 if (!loggedIn) return "Log in first (step 2)"
                 return ""
             }
@@ -1817,7 +1967,7 @@ ApplicationWindow {
                     header: true
                     visible: backend.textsDraft && backend.allowUploadSet && !backend.hubDryRun
                     type: "warning"
-                    text: "Rehearsal: FT_HANDREC_ALLOW_UPLOAD=1 allows uploads to " + backend.dataset
+                    text: "Rehearsal: FT_HANDREC_ALLOW_UPLOAD=1 allows uploads to " + backend.datasetFor(uploadView.session)
                           + " while the texts are drafts."
                 }
             ]
@@ -1843,7 +1993,8 @@ ApplicationWindow {
                     textFormat: Text.StyledText
                     linkColor: Theme.accent
                     color: Theme.text
-                    text: "Your export goes to <a href=\"" + backend.datasetUrl + "\">" + backend.dataset + "</a> as a "
+                    text: "Your export goes to <a href=\"" + backend.datasetUrlFor(uploadView.session) + "\">"
+                          + backend.datasetFor(uploadView.session) + "</a> as a "
                           + "pull request from your own Hugging Face account. Nothing is published until the "
                           + "maintainer has checked it."
                     onLinkActivated: link => Qt.openUrlExternally(link)
@@ -1984,7 +2135,7 @@ ApplicationWindow {
                     textFormat: Text.StyledText
                     linkColor: Theme.accent
                     color: Theme.text
-                    text: "The first time, accept the dataset's terms on <a href=\"" + backend.datasetUrl
+                    text: "The first time, accept the dataset's terms on <a href=\"" + backend.datasetUrlFor(uploadView.session)
                           + "\">its page</a>. Upload checks the export, opens your pull request, then sends the files."
                     onLinkActivated: link => Qt.openUrlExternally(link)
                 }
