@@ -459,6 +459,38 @@ def run(base, out=None, log=print, live_session=True):
     return s.problems, s.shots
 
 
+def shoot_ready(s, b):
+    """Getting ready, busy and failed: session.get_ready faked (a dry run skips it), slowly."""
+    mod = b._runner()
+    real = mod.get_ready
+    gate = threading.Event()
+
+    def fake(frametop_hands=False, need_live=False, panel_bin=None, on_part=None, log=None):
+        for key in ("steamvr", "cameras", "hands"):
+            on_part(key, "busy", "")
+            on_part(key, "ok", "Running")
+        on_part("panel", "busy", "")
+        gate.wait(10)
+        error = "ft-handpanel exited (is SteamVR running?)"
+        on_part("panel", "failed", error)
+        return {"ok": False, "error": error, "units": [], "panel": None}
+    mod.get_ready = fake
+    b._session_options["dry_run"] = False
+    try:
+        s.later(f'root.chosenBounty = "{BOUNTY}"; root.roundPicked = true; root.show(readyPage)')
+        if s.js("pageStack.currentItem.title") != "Getting ready":
+            s.problem("readyPage isn't Getting ready")
+        s.shoot("ready-busy")
+        gate.set()
+        s.wait_for(lambda: b.readyState == "failed", 10)
+        s.wait(200)
+        s.shoot("ready-failed")
+    finally:
+        gate.set()
+        mod.get_ready = real
+        b._session_options["dry_run"] = True
+
+
 def shots(s, empty, data, live_session):
     # 1. Nothing yet: the board, then the consent once a round is picked.
     s.load(empty)
@@ -497,6 +529,7 @@ def shots(s, empty, data, live_session):
 
     s.show("bounties")
     s.shoot("bounties-agreed")
+    shoot_ready(s, b)
     s.later('root.pickRound("debug")')
     s.wait_for(lambda: b.cameraState != "checking" and b.lightingMeasured != "Measuring…", 10)
     if s.js("pageStack.currentItem.title") != "Before you start":

@@ -3,6 +3,7 @@
 # window (app/main.qml, Qt Quick Controls), on the host, with the venv's Python and PySide6.
 # From SteamVR's "Launch a program" it runs in Steam's gamescope session (Xwayland: Qt's xcb).
 # Its output goes to ~/.local/state/frametop-hand-recorder/window.log unless it has a terminal.
+# On a Plasma desktop it runs on Wayland, a little smaller than Plasma's scale (below).
 # Options go to ft_handrec.py: --page NAME, and --dry-run and --hub-dry-run for testing.
 #
 # Two layouts: an install (this file in versions/VERSION/bin, the venv two levels up), and this
@@ -18,8 +19,23 @@ else
   venv=${FT_HANDREC_VENV:-$tree/.venv}
 fi
 
+# Frametop's desktop gives its apps their own XDG_RUNTIME_DIR (/run/user/UID/frametop) and
+# XDG_CONFIG_HOME (~/.config/frametop). The recorder needs the real ones: systemctl --user (the
+# camera broker, hand tracking, Frametop's units) finds the user's systemd in the runtime dir, and
+# SteamVR's openvrpaths.vrpath (the headset panel) is in ~/.config/openvr.
+uid=$(id -u)
+run=/run/user/$uid
+if [ "${XDG_RUNTIME_DIR:-}" != "$run" ] && [ -S "$run/systemd/private" ]; then
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    case $WAYLAND_DISPLAY in /*) ;; *) export WAYLAND_DISPLAY="${XDG_RUNTIME_DIR:-$run}/$WAYLAND_DISPLAY" ;; esac
+  fi
+  export XDG_RUNTIME_DIR=$run
+fi
+if [ ! -f "${XDG_CONFIG_HOME:-$HOME/.config}/openvr/openvrpaths.vrpath" ] && [ -f "$HOME/.config/openvr/openvrpaths.vrpath" ]; then
+  export XDG_CONFIG_HOME=$HOME/.config
+fi
 if [ ! -t 2 ]; then
-  logdir=${XDG_STATE_HOME:-$HOME/.local/state}/frametop-hand-recorder
+  logdir=$HOME/.local/state/frametop-hand-recorder
   mkdir -p "$logdir"
   log=$logdir/window.log
   [ -f "$log" ] && [ "$(stat -c %s "$log")" -gt 5000000 ] && mv -f "$log" "$log.1"
@@ -31,8 +47,22 @@ if [ ! -x "$venv/bin/python" ]; then
   exit 1
 fi
 
-# gamescope (and Plasma) give X11 through Xwayland; Qt's Wayland platform isn't what gamescope shows.
+# On a Plasma desktop (Frametop's, or SteamOS's desktop mode) Qt runs on Wayland: KWin's wheel
+# events, a controller's thumbstick included, reach it as they do Plasma's own apps. Elsewhere
+# (SteamVR's "Launch a program" runs it in gamescope, whose Wayland isn't what it shows) X11
+# through Xwayland. Plasma's scale (Frametop's desktop: 1.25) makes the window large: a little
+# smaller by default there, FT_HANDREC_SCALE sets another factor.
+plasma=0
+[ "${KDE_FULL_SESSION:-}" = true ] && [ -n "${WAYLAND_DISPLAY:-}" ] && plasma=1
 if [ -z "${QT_QPA_PLATFORM:-}" ]; then
-  if [ -n "${DISPLAY:-}" ]; then export QT_QPA_PLATFORM=xcb; else export QT_QPA_PLATFORM=wayland; fi
+  if [ $plasma = 1 ]; then export QT_QPA_PLATFORM="wayland;xcb"
+  elif [ -n "${DISPLAY:-}" ]; then export QT_QPA_PLATFORM=xcb
+  else export QT_QPA_PLATFORM=wayland
+  fi
+fi
+if [ -n "${FT_HANDREC_SCALE:-}" ]; then
+  export QT_SCALE_FACTOR=$FT_HANDREC_SCALE
+elif [ $plasma = 1 ] && [ -z "${QT_SCALE_FACTOR:-}" ]; then
+  export QT_SCALE_FACTOR=0.85
 fi
 exec "$venv/bin/python" "$hands/rec/ft_handrec.py" --qml "$tree/app/main.qml" --style Basic "$@"

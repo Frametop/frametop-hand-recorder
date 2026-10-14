@@ -121,19 +121,20 @@ ApplicationWindow {
     }
 
     // A round picked on the Bounties page: the consent first if it isn't agreed to yet, then
+    // Getting ready (SteamVR, the cameras, hand tracking and the headset panel started), then
     // Before you start (the camera check, the privacy checks), then Start. The consent asked for
     // follows the round: while the bounties are tested, the testing one (TESTING.md).
     function pickRound(bounty) {
         chosenBounty = bounty
         roundPicked = true
         backend.setConsentKind(backend.roundConsentKind(bounty))
-        show(backend.needsConsent ? welcomePage : checklistPage)
+        show(backend.needsConsent ? welcomePage : readyPage)
     }
 
     // --page bounties|welcome|checklist|session|review|export|upload opens the app on that page;
     // it opens on Bounties. Pages that record or send need the consent: they lead to Welcome.
     function firstPage() {
-        return ({ welcome: welcomePage, checklist: backend.needsConsent ? welcomePage : checklistPage,
+        return ({ welcome: welcomePage, checklist: backend.needsConsent ? welcomePage : readyPage,
                   session: sessionPage, review: reviewPage, export: exportPage,
                   upload: uploadPage })[startPage] || bountiesPage
     }
@@ -157,7 +158,8 @@ ApplicationWindow {
     component NavButton: Button {
         id: navButton
         property Component page
-        readonly property bool current: root.navPage === page
+        property Component alsoPage: null    // a page it leads to, shown as current too
+        readonly property bool current: root.navPage === page || (alsoPage !== null && root.navPage === alsoPage)
         Layout.fillWidth: true
         implicitHeight: 64
         focusPolicy: Qt.NoFocus
@@ -216,7 +218,12 @@ ApplicationWindow {
             }
             NavButton { text: "Bounties"; page: bountiesPage }
             NavButton { text: "Welcome"; page: welcomePage }
-            NavButton { text: "Before you start"; page: checklistPage; enabled: !backend.needsConsent }
+            NavButton {
+                text: "Before you start"
+                page: readyPage    // through Getting ready
+                alsoPage: checklistPage
+                enabled: !backend.needsConsent
+            }
             NavButton { text: "Session"; page: sessionPage; enabled: !backend.needsConsent }
             NavButton { text: "Review"; page: reviewPage }
             NavButton { text: "Export"; page: exportPage; enabled: !backend.needsConsent }
@@ -584,14 +591,91 @@ ApplicationWindow {
                 onClicked: {
                     backend.acceptConsent(adult.checked, region.checked, agree.checked, handed.currentValue)
                     if (!backend.needsConsent)
-                        root.show(root.roundPicked ? checklistPage : bountiesPage)
+                        root.show(root.roundPicked ? readyPage : bountiesPage)
                 }
             }
             AppButton {
                 visible: !backend.needsConsent
                 highlighted: true
                 text: "Continue"
-                onClicked: root.show(root.roundPicked ? checklistPage : bountiesPage)
+                onClicked: root.show(root.roundPicked ? readyPage : bountiesPage)
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- Getting ready
+    // After the consent: SteamVR, the cameras, hand tracking and the headset panel, each started
+    // if it isn't running (backend.getReady); on to Before you start once they all are.
+    Component {
+        id: readyPage
+        ScrollPage {
+            id: ready
+            title: "Getting ready"
+            readonly property bool done: backend.readyState === "ok" && backend.readyRound === root.chosenBounty
+            // Later, not while the page stack is still pushing this page
+            onDoneChanged: if (done) Qt.callLater(root.show, checklistPage)
+            // Each time: a part can stop meanwhile (SteamVR restarted), and when all run it's quick
+            Component.onCompleted: {
+                if (root.chosenBounty === "")
+                    Qt.callLater(root.show, bountiesPage)
+                else
+                    backend.getReady(root.chosenBounty)
+            }
+            banners: [
+                Banner {
+                    header: true
+                    visible: backend.readyState === "failed"
+                    type: "error"
+                    text: backend.readyError
+                    actions: [
+                        AppButton { text: "Try again"; highlighted: true; onClicked: backend.getReady(root.chosenBounty) },
+                        AppButton { text: "Back to Bounties"; onClicked: root.show(bountiesPage) }
+                    ]
+                }
+            ]
+
+            Hint {
+                text: "Starting what the round needs. This takes a few seconds; put the headset on if SteamVR "
+                      + "isn't running."
+            }
+            Repeater {
+                model: backend.readyParts
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: Theme.largeSpacing
+                    Item {
+                        implicitWidth: 44
+                        implicitHeight: 44
+                        Busy { anchors.centerIn: parent; running: modelData.state === "busy"; visible: running }
+                        Label {
+                            anchors.centerIn: parent
+                            visible: modelData.state === "ok" || modelData.state === "failed"
+                            text: modelData.state === "ok" ? "\u2713" : "\u2715"
+                            font.pixelSize: Theme.headingSize
+                            font.bold: true
+                            color: modelData.state === "ok" ? Theme.positive : Theme.negative
+                        }
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Label {
+                            Layout.fillWidth: true
+                            font.bold: true
+                            color: modelData.state === "" ? Theme.dimText : Theme.text
+                            text: modelData.title
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            visible: text !== ""
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Theme.smallFontSize
+                            color: modelData.state === "failed" ? Theme.negative : Theme.dimText
+                            text: modelData.state === "busy" ? "Starting…" : modelData.state === "" ? "Waiting" : modelData.text
+                        }
+                    }
+                }
             }
         }
     }
