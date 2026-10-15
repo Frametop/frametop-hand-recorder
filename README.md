@@ -8,7 +8,7 @@ The recorder runs in SteamVR's dashboard. You pick a **bounty**: a short round, 
 
 While you record, the dashboard stays closed. Use the button on the right side of the headset: press it to start each step, press it twice to record a step again, and hold it to stop. In a testing session, a press marks a moment and a hold finishes.
 
-**Status: testing.** This is a test build, [v0.2.0-rc2](https://github.com/Frametop/frametop-hand-recorder/releases/tag/v0.2.0-rc2). Before your first bounty the recorder shows the hand dataset's consent, and before your first testing session its own short testing consent. The maintainer checks every upload before it's merged.
+**Status: testing.** This is a test build, [v0.2.0-rc3](https://github.com/Frametop/frametop-hand-recorder/releases/tag/v0.2.0-rc3). Before your first bounty the recorder shows the hand dataset's consent, and before your first testing session its own short testing consent. The maintainer checks every upload before it's merged.
 
 Please report what works and what doesn't in this repo's [issues](https://github.com/Frametop/frametop-hand-recorder/issues) or the [Frametop Discord](https://discord.gg/W3X9f7z3Bc).
 
@@ -19,12 +19,12 @@ You need a Steam Frame with SteamOS and SteamVR, about 1.2 GB free for the insta
 1. In the headset, open the dashboard, then **Launch a program** → **Konsole**.
 2. Run:
    ```
-   curl -fsSL https://github.com/Frametop/frametop-hand-recorder/releases/download/v0.2.0-rc2/get-hand-recorder.sh | bash
+   curl -fsSL https://github.com/Frametop/frametop-hand-recorder/releases/download/v0.2.0-rc3/get-hand-recorder.sh | bash
    ```
 3. It asks for your password once. If you've never set one, run `passwd` first, then the command again.
 4. Open the dashboard, then **Launch a program** → **Frametop Hand Recorder**.
 
-To update, run the command in the newest release's notes on the [releases page](https://github.com/Frametop/frametop-hand-recorder/releases). The command above always installs v0.2.0-rc2.
+To update, run the command in the newest release's notes on the [releases page](https://github.com/Frametop/frametop-hand-recorder/releases). The command above always installs v0.2.0-rc3.
 
 ### What the installer changes
 
