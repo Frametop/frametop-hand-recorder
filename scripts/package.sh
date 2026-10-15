@@ -43,8 +43,10 @@ put 755 "$built/rec/build/ft-handpanel" hands/rec/build/ft-handpanel
 # testing session's script, the keys test uploads are encrypted to, the pose pictures, the
 # models, and the part it shares with the eye recorder (recorder/)
 put 644 "$ft/camcheck.py" hands/camcheck.py
-for f in ft_handrec.py session.py takes.py sides.py hub.py validate.py livelog.py script.json debug.json \
-         bounties.json CONSENT.md TESTING.md UPLOAD.md test-recipients.txt; do
+for f in "$ft"/rec/*.py; do   # every module: one left out breaks an import in the field
+  put 644 "$f" "hands/rec/$(basename "$f")"
+done
+for f in script.json debug.json bounties.json CONSENT.md TESTING.md UPLOAD.md test-recipients.txt; do
   put 644 "$ft/rec/$f" "hands/rec/$f"
 done
 for f in "$ft"/rec/bounties/*.json; do
