@@ -234,8 +234,8 @@ cat > "$ENTRY.new" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Frametop Hand Recorder
-GenericName=Record your hands for the hand dataset
-Comment=Record, review and upload hand recordings for Frametop's open hand dataset
+GenericName=Hand recorder for Frametop's hand tracking
+Comment=Record your hands for Frametop's hand tracking: bounty rounds for its hand dataset, testing sessions to show what goes wrong
 Exec=$PREFIX/current/bin/frametop-hand-recorder
 Icon=$PREFIX/current/app/icon.png
 Terminal=false
