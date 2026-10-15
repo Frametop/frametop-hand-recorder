@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Install or update the Frametop Hand Recorder on a Steam Frame, without Frametop:
-#   curl -fsSL https://github.com/Frametop/frametop-hand-recorder/releases/latest/download/get-hand-recorder.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Frametop/frametop-hand-recorder/main/get-hand-recorder.sh | bash
 # Then open it from SteamVR's dashboard: Launch a program -> Frametop Hand Recorder.
+#
+# That copy, the repo's, installs the newest release: it runs that release's own copy of this
+# script, which has the release's VERSION. A release's copy (in its notes) installs that release.
 #
 # It downloads this release, checks its SHA256, unpacks it into
 # ~/.local/share/frametop-hand-recorder/versions/VERSION (current points at it), sets up the
@@ -47,6 +50,7 @@ EOF
 }
 
 from="" caps=1 yes=0 action=install
+args=("$@")
 while [ $# -gt 0 ]; do
   case $1 in
     --uninstall) action=uninstall ;;
@@ -59,6 +63,28 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ "$(id -u)" != 0 ] || die "run it as your own user, not with sudo: it asks for sudo itself, once"
+
+# The repo's copy belongs to no release: it finds the newest published one, pre-releases included
+# (GitHub's releases/latest skips those, and every release so far is one), and runs that
+# release's installer with the same options. --from and --uninstall need no release.
+if [ "$VERSION" = 0.0.0-dev ] && [ "$action" = install ] && [ -z "$from" ]; then
+  step "Finding the newest release"
+  found=$(curl -fsSL --retry 3 "https://api.github.com/repos/$REPO/releases?per_page=30" | python3 -c '
+import json, sys
+releases = [r for r in json.load(sys.stdin) if not r.get("draft")]
+for r in sorted(releases, key=lambda r: r.get("published_at") or "", reverse=True):
+    for a in r.get("assets", []):
+        if a.get("name") == "get-hand-recorder.sh":
+            print(r["tag_name"], a["browser_download_url"])
+            sys.exit(0)
+sys.exit(1)') || die "couldn't find a release on github.com/$REPO/releases: try again, or use the command in a release's notes"
+  tag=${found%% *} url=${found#* }
+  [[ $url == "https://github.com/$REPO/releases/download/$tag/get-hand-recorder.sh" ]] ||
+    die "GitHub named a strange installer: $url"
+  say "$tag"
+  curl -fsSL --retry 3 "$url" | bash -s -- "${args[@]}"
+  exit
+fi
 
 # The recorder's transient units (session.py, ft_handrec.py), stopped if they run this install's
 # programs: Frametop's own recorder uses the same names.

@@ -8,7 +8,7 @@ The recorder runs in SteamVR's dashboard. You pick a **bounty**: a short round, 
 
 While you record, the dashboard stays closed. Use the button on the right side of the headset: press it to start each step, press it twice to record a step again, and hold it to stop. In a testing session, a press marks a moment and a hold finishes.
 
-**Status: testing.** This is a test build, [v0.2.0-rc3](https://github.com/Frametop/frametop-hand-recorder/releases/tag/v0.2.0-rc3). Before your first bounty the recorder shows the hand dataset's consent, and before your first testing session its own short testing consent. The maintainer checks every upload before it's merged.
+**Status: testing.** The releases are test builds (the newest is on the [releases page](https://github.com/Frametop/frametop-hand-recorder/releases)). Before your first bounty the recorder shows the hand dataset's consent, and before your first testing session its own short testing consent. The maintainer checks every upload before it's merged.
 
 Please report what works and what doesn't in this repo's [issues](https://github.com/Frametop/frametop-hand-recorder/issues) or the [Frametop Discord](https://discord.gg/W3X9f7z3Bc).
 
@@ -19,12 +19,12 @@ You need a Steam Frame with SteamOS and SteamVR, about 1.2 GB free for the insta
 1. In the headset, open the dashboard, then **Launch a program** → **Konsole**.
 2. Run:
    ```
-   curl -fsSL https://github.com/Frametop/frametop-hand-recorder/releases/download/v0.2.0-rc3/get-hand-recorder.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/Frametop/frametop-hand-recorder/main/get-hand-recorder.sh | bash
    ```
 3. It asks for your password once. If you've never set one, run `passwd` first, then the command again.
 4. Open the dashboard, then **Launch a program** → **Frametop Hand Recorder**.
 
-To update, run the command in the newest release's notes on the [releases page](https://github.com/Frametop/frametop-hand-recorder/releases). The command above always installs v0.2.0-rc3.
+It installs the newest release, test builds included. To update, run it again. To install one particular release, use the command in that release's notes on the [releases page](https://github.com/Frametop/frametop-hand-recorder/releases).
 
 ### What the installer changes
 
@@ -89,7 +89,7 @@ Leave out `frame-job --local --` on a machine without frame-job.
 1. Move the submodule to the Frametop commit to ship, and push.
 2. Tag `vX.Y.Z` and push the tag. CI builds it and makes a draft release, a pre-release if the tag has a `-` (`v0.2.0-rc1`).
 3. Install the draft's tarball on a Frame with `--from`, and record a bounty (and, with Frametop installed, a testing session).
-4. Publish the release. `releases/latest/download/get-hand-recorder.sh` then points at it, but only for a tag without a `-`: GitHub never counts a pre-release as the latest. Until the first such release, the install command above names the test build, so move it to each new one.
+4. Publish the release. The install command above then installs it: the repo's `get-hand-recorder.sh` asks GitHub for the newest published release, pre-releases included, and runs that release's own copy. `releases/latest/download/get-hand-recorder.sh` only works for a tag without a `-`, as GitHub never counts a pre-release as the latest.
 
 ## License
 
