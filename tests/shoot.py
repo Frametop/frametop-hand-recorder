@@ -514,12 +514,12 @@ def shots(s, empty, data, live_session):
     if s.js("pageStack.currentItem.title") != "Review":
         s.problem("--page review doesn't open on Review before the consent")
     # The profile agreed to an older CONSENT.md, never to TESTING.md: picking a bounty asks for
-    # the testing consent, keeping the contributor id.
+    # the current CONSENT.md, keeping the contributor id.
     s.later(f'root.pickRound("{BOUNTY}")')
     if s.js("pageStack.currentItem.title") != "Welcome":
-        s.problem("a bounty without the testing consent doesn't go to Welcome")
+        s.problem("a bounty without the current consent doesn't go to Welcome")
     s.scroll(10 ** 6)
-    s.shoot("welcome-testing-end")
+    s.shoot("welcome-dataset-end")
     b.acceptConsent(True, True, True, "right")
     s.wait(100)
     s.js("toast.opacity = 0")   # its "Thank you" would cover the next shots
@@ -530,6 +530,15 @@ def shots(s, empty, data, live_session):
     s.show("bounties")
     s.shoot("bounties-agreed")
     shoot_ready(s, b)
+    # The testing session has its own consent (TESTING.md): agreeing to the dataset's isn't enough.
+    s.later('root.pickRound("debug")')
+    if s.js("pageStack.currentItem.title") != "Welcome":
+        s.problem("the testing session without the testing consent doesn't go to Welcome")
+    s.scroll(10 ** 6)
+    s.shoot("welcome-testing-end")
+    b.acceptConsent(True, True, True, "right")
+    s.wait(100)
+    s.js("toast.opacity = 0")
     s.later('root.pickRound("debug")')
     s.wait_for(lambda: b.cameraState != "checking" and b.lightingMeasured != "Measuring…", 10)
     if s.js("pageStack.currentItem.title") != "Before you start":

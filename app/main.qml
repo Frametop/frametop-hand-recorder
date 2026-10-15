@@ -123,7 +123,7 @@ ApplicationWindow {
     // A round picked on the Bounties page: the consent first if it isn't agreed to yet, then
     // Getting ready (SteamVR, the cameras, hand tracking and the headset panel started), then
     // Before you start (the camera check, the privacy checks), then Start. The consent asked for
-    // follows the round: while the bounties are tested, the testing one (TESTING.md).
+    // follows the round: the testing session's is TESTING.md, a bounty's the dataset's (CONSENT.md).
     function pickRound(bounty) {
         chosenBounty = bounty
         roundPicked = true
