@@ -371,6 +371,27 @@ ApplicationWindow {
 
     // Restart SteamVR (the camera check's fix). SteamVR's restart closes every VR app, and this
     // window may go with it: it's then opened again from the dashboard.
+    // Freeing space: an uploaded round's recordings and export go, the record of its upload
+    // stays (contributions.json, listed on the Review page).
+    function askFreeAll() {
+        confirm.ask("Delete the uploaded rounds here?",
+                    root.plural(backend.freeableCount, "uploaded round") + " (" + backend.freeableText + ") are deleted "
+                    + "from the headset: their recordings and exports. They're already in your pull requests, and "
+                    + "your record of each upload stays on the Review page.",
+                    () => backend.freeAllUploaded())
+    }
+    function askFree(row, popPages) {
+        const sid = row.id
+        confirm.ask("Delete the local copy?",
+                    "The session of " + row.label + " is uploaded (" + row.pr_url + "). Its recordings and export ("
+                    + row.freeText + ") are deleted from the headset; your record of the upload stays on the Review page.",
+                    () => {
+                        if (popPages && pageStack.depth > 1)
+                            pageStack.pop(pageStack.get(0))
+                        backend.freeSession(sid)
+                    })
+    }
+
     function askRestartSteamVR() {
         confirm.ask("Restart SteamVR?",
                     "SteamVR starts its cameras again, and with them the colour camera module. This closes every "
@@ -828,13 +849,19 @@ ApplicationWindow {
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
-                text: backend.freeText + " (a round takes about 15 GB, and its export about 12 GB more)"
+                text: backend.freeText + " (a round needs about " + backend.roundNeedText
+                      + ": about 16 GB to record and 15 GB to export it)"
             }
             Banner {
                 visible: !backend.diskOk
                 type: "error"
-                text: "Not enough free space for a round. Export and delete earlier sessions (Review), "
-                      + "or free up space, first."
+                text: "Not enough free space for a round and its export. "
+                      + (backend.freeableCount > 0
+                         ? root.plural(backend.freeableCount, "uploaded round") + " can go to free "
+                           + backend.freeableText + ": your record of each upload stays."
+                         : "Delete sessions you don't need (Review), or free up space, first.")
+                showActions: backend.freeableCount > 0
+                actions: [ AppButton { text: "Delete uploaded rounds"; onClicked: root.askFreeAll() } ]
             }
 
             SectionHeading { text: "Cameras" }
@@ -1482,10 +1509,18 @@ ApplicationWindow {
             title: "Review"
             tools: [ AppButton { text: "Refresh"; onClicked: backend.refreshSessions() } ]
 
+            Banner {
+                visible: backend.freeableCount > 0
+                type: "info"
+                text: root.plural(backend.freeableCount, "uploaded round") + " can be deleted here to free "
+                      + backend.freeableText + ". Your record of each upload stays, below."
+                actions: [ AppButton { text: "Delete uploaded rounds"; onClicked: root.askFreeAll() } ]
+            }
+
             PlaceholderMessage {
                 Layout.fillWidth: true
                 Layout.topMargin: 120
-                visible: sessionRows.count === 0
+                visible: sessionRows.count === 0 && backend.contributions.length === 0
                 text: "No sessions yet"
                 explanation: "Recorded sessions appear here, to watch and trim before you export them."
             }
@@ -1529,7 +1564,13 @@ ApplicationWindow {
                                       + (sessionRow.modelData.lightingText ? " · " + sessionRow.modelData.lightingText : "")
                                       + (sessionRow.modelData.export_stale ? " · changed since its export"
                                          : sessionRow.modelData.exported ? " · exported (" + sessionRow.modelData.exportText + ")" : "")
+                                      + (sessionRow.modelData.uploadText ? " · " + sessionRow.modelData.uploadText : "")
                             }
+                        }
+                        AppButton {
+                            text: "Free up space"
+                            visible: sessionRow.modelData.freeable
+                            onClicked: root.askFree(sessionRow.modelData, true)
                         }
                         AppButton {
                             text: "Delete session"
@@ -1548,6 +1589,29 @@ ApplicationWindow {
                             }
                         }
                     }
+                }
+            }
+
+            // The contributions log: every upload, kept when its local copy is deleted.
+            Heading {
+                visible: backend.contributions.length > 0
+                Layout.topMargin: Theme.largeSpacing
+                text: "Your uploads"
+            }
+            Repeater {
+                model: backend.contributions
+                Label {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    color: Theme.text
+                    linkColor: Theme.accent
+                    textFormat: Text.StyledText
+                    text: "<b>" + modelData.title + "</b> · " + modelData.label + " · " + modelData.uploadedText
+                          + (modelData.prUrl ? " · <a href=\"" + modelData.prUrl + "\">" + (modelData.prText || "pull request") + "</a>" : "")
+                          + (modelData.testing ? " · testing" : "")
+                          + (modelData.deletedText ? " · " + modelData.deletedText : "")
+                    onLinkActivated: link => Qt.openUrlExternally(link)
                 }
             }
         }
@@ -1963,6 +2027,13 @@ ApplicationWindow {
                 text: backend.exportText
                 color: Theme.text
             }
+            Banner {
+                visible: !backend.exporting && backend.exportText.indexOf("Failed") === 0 && backend.freeableCount > 0
+                type: "info"
+                text: root.plural(backend.freeableCount, "uploaded round") + " can be deleted to free "
+                      + backend.freeableText + ". Your record of each upload stays."
+                actions: [ AppButton { text: "Delete uploaded rounds"; onClicked: root.askFreeAll() } ]
+            }
             RowLayout {
                 visible: exportView.chosen !== null && exportView.chosen.exported && !backend.exporting
                 spacing: Theme.spacing
@@ -2305,6 +2376,15 @@ ApplicationWindow {
                         AppButton { text: "Open"; onClicked: Qt.openUrlExternally(uploadView.upResult.pr_url) },
                         AppButton { text: "Copy link"; onClicked: backend.copy(uploadView.upResult.pr_url) }
                     ]
+                }
+                Banner {
+                    visible: !backend.uploading && uploadView.mine && uploadView.up.phase === "done"
+                             && !uploadView.upResult.dry_run && uploadView.chosen !== null && uploadView.chosen.freeable
+                    type: "info"
+                    text: "This round doesn't need to stay on the headset now. Deleting its local copy frees "
+                          + (uploadView.chosen ? uploadView.chosen.freeText : "") + "; your record of the upload "
+                          + "stays on the Review page."
+                    actions: [ AppButton { text: "Delete local copy"; onClicked: root.askFree(uploadView.chosen, false) } ]
                 }
                 Banner {
                     visible: !backend.uploading && uploadView.mine && uploadView.up.phase === "failed"

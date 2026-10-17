@@ -24,7 +24,9 @@ import threading
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REC = os.path.join(ROOT, "frametop", "hands", "rec")
+# FT_HANDREC_FRAMETOP: a Frametop checkout to shoot instead of the submodule (a branch, before
+# the submodule moves to it).
+REC = os.path.join(os.environ.get("FT_HANDREC_FRAMETOP") or os.path.join(ROOT, "frametop"), "hands", "rec")
 QML = os.path.join(ROOT, "app", "main.qml")
 sys.path.insert(0, REC)
 sys.path.insert(0, os.path.join(REC, "tests"))
@@ -459,6 +461,71 @@ def run(base, out=None, log=print, live_session=True):
     return s.problems, s.shots
 
 
+def free_space_states(s, b):
+    """Freeing space (2026-10-17): SESSION_A uploaded, an earlier upload whose local copy is gone,
+    and the disk too full for a round."""
+    import datetime
+    import takes
+    from recorder import contributions
+    store = takes.Store(b.store.base)
+    meta_path = os.path.join(store.session_dir(SESSION_A), "session.json")
+    st = os.stat(meta_path)
+    meta = takes.read_json(meta_path)
+    later = datetime.datetime.now().astimezone() + datetime.timedelta(minutes=5)
+    pr = "https://huggingface.co/datasets/DeeJanuz/frametop-hands/discussions/"
+    meta["bounty"] = {"id": "index-taps", "title": "Index taps"}
+    meta["uploads"] = [{"repo": "DeeJanuz/frametop-hands", "pr_url": pr + "12", "pr_num": 12, "status": "done",
+                        "uploaded": later.isoformat(timespec="seconds"), "export_sha": takes.export_sha(store.export_dir(SESSION_A))}]
+    takes.write_json(meta_path, meta)
+    os.utime(meta_path, ns=(st.st_atime_ns, st.st_mtime_ns))
+    contributions.add(store.base, [{"session": "20261001-090000", "repo": "DeeJanuz/frametop-hands", "pr_url": pr + "9",
+                                    "pr_num": 9, "uploaded": "2026-10-01T09:20:00+00:00", "export_sha": "x",
+                                    "export_bytes": 11 * 1000 ** 3, "bounty": {"id": "pinches", "title": "Pinches"},
+                                    "kind": "public", "debug": False, "started": "", "minutes": 2.6,
+                                    "local_deleted": "2026-10-02T10:00:00+00:00"}])
+    store.log_uploads()
+    b.refreshSessions()
+    if b.freeableCount != 1:
+        s.problem(f"freeableCount is {b.freeableCount}, not 1")
+    s.show("review")
+    s.shoot_pages("review-uploaded", limit=3)
+    s.js("root.askFreeAll()")
+    s.shoot("confirm-free-all", settle=400)
+    s.js("confirm.reject()")
+    s.js("root.askFree(backend.sessions.find(r => r.freeable), false)")
+    s.shoot("confirm-free-one", settle=400)
+    s.js("confirm.reject()")
+    s.wait(300)
+
+    FREE["bytes"] = 9 * 1000 ** 3
+    b.diskChanged.emit()
+    s.show("checklist")
+    s.scroll_to_text("Space")
+    s.shoot("checklist-low-space")
+    s.js(f'root.chosenSession = "{SESSION_B}"')
+    s.show("export")
+    b._export_session = SESSION_B
+    b._export_text = ("Failed: Not enough free space to export this session: 9.0 GB free, and the export needs about "
+                      "13.9 GB to start. Free some space and export again. Rounds that are already uploaded can be "
+                      "deleted on the Review page, and your record of them stays.")
+    b.exportChanged.emit()
+    s.shoot("export-failed-space")
+    b._export_text, b._export_session = "", ""
+    b.exportChanged.emit()
+    FREE["bytes"] = 120 * 1000 ** 3
+    b.diskChanged.emit()
+
+    s.js(f'root.chosenSession = "{SESSION_A}"')
+    s.show("upload")
+    b._upload = {"session": SESSION_A, "phase": "done", "text": "Uploaded", "fraction": 1.0, "log": "", "error": {},
+                 "pr_url": pr + "12", "result": {"dry_run": False, "pr_url": pr + "12", "repo": "DeeJanuz/frametop-hands"}}
+    b.uploadChanged.emit()
+    s.scroll_to_text("3. Upload")
+    s.shoot("upload-done-free")
+    b._upload = {}
+    b.uploadChanged.emit()
+
+
 def shoot_ready(s, b):
     """Getting ready, busy and failed: session.get_ready faked (a dry run skips it), slowly."""
     mod = b._runner()
@@ -654,6 +721,9 @@ def shots(s, empty, data, live_session):
     else:
         s.log("no zstd: nothing exported, so no upload states")
         s.shoot("upload-nothing-exported")
+
+    if exported:
+        free_space_states(s, b)
 
     # Dialogs and messages (never accepted).
     s.show("review")
