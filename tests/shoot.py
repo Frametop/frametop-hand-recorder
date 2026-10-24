@@ -71,7 +71,7 @@ def make_safe():
 
 
 FREE = {"bytes": 120 * 1000 ** 3}
-BOUNTY = "pinches"   # the bounty the shots pick
+BOUNTY = "close-up"   # the bounty the shots pick (a live one on the shipped board)
 
 
 class DummySession:
