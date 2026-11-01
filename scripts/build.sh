@@ -5,32 +5,62 @@
 #                       builds it, and jsoncpp built here (Ubuntu has no static one)
 #   ft-handpanel        linked to SteamVR's libopenvr_api (rpath /opt/steamvr/bin/linuxarm64) and
 #                       the system's libgbm, libdrm and libstdc++, as frametop/hands/rec/build.sh does
-# then runs the C++ unit tests (make check) and scripts/check-binaries.sh.
+# then runs the C++ unit tests (make check) and scripts/check-binaries.sh. Frametop headers outside
+# hands/ that its sources include (screens/overlaypanel.h, conf/ftsock.h, screens/glyphs.h, and
+# what those include) are copied to the same place under build/, found from the #include lines.
+# FRAMETOP=DIR builds from another Frametop checkout instead of the submodule (to try a newer
+# one before bumping it), into build/other-frametop/ so the release build's files aren't mixed.
 # Runs on Ubuntu 24.04 aarch64 (glibc 2.39, as SteamOS on the Frame), with the packages in
 # scripts/build-deps.txt: scripts/build-in-container.sh on the Frame, or such a runner.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+fr=${FRAMETOP:-$root/frametop}
 out=$root/build
+[ -z "${FRAMETOP:-}" ] || out=$root/build/other-frametop
 src=$out/hands
 deps=$out/deps
 JSONCPP_TAG=1.9.6   # as Fedora 44, which Frametop's dev container builds with
 
-[ -f "$root/frametop/hands/Makefile" ] || { echo "frametop/ is empty: git submodule update --init" >&2; exit 1; }
+[ -f "$fr/hands/Makefile" ] || { echo "$fr has no hands/Makefile (the submodule: git submodule update --init)" >&2; exit 1; }
 [ "$(uname -m)" = aarch64 ] || { echo "build on aarch64 (the Frame's CPU), not $(uname -m)" >&2; exit 1; }
 
 # The panel's headers, at the commits Frametop's own build pins: OpenVR's tag and header sha256
-# in scripts/openvr.sh, stb's commit in hands/rec/build.sh.
+# in scripts/openvr.sh, stb's commit in scripts/stb.sh (before 2026-10-28, in hands/rec/build.sh).
 pin() { sed -n "s/^$1=\([0-9A-Za-z.]*\)$/\1/p" "$2" | head -1; }
-OPENVR_TAG=$(pin openvr_tag "$root/frametop/scripts/openvr.sh")
-OPENVR_SHA=$(sed -n 's/^openvr_fetch openvr\.h \([0-9a-f]\{64\}\)$/\1/p' "$root/frametop/scripts/openvr.sh" | head -1)
-STB=$(pin stb "$root/frametop/hands/rec/build.sh")
+OPENVR_TAG=$(pin openvr_tag "$fr/scripts/openvr.sh")
+OPENVR_SHA=$(sed -n 's/^openvr_fetch openvr\.h \([0-9a-f]\{64\}\)$/\1/p' "$fr/scripts/openvr.sh" | head -1)
+STB=$( { [ -f "$fr/scripts/stb.sh" ] && pin stb_commit "$fr/scripts/stb.sh"; } || true)
+[ -n "$STB" ] || STB=$(pin stb "$fr/hands/rec/build.sh")
 [ -n "$OPENVR_TAG" ] && [ -n "$OPENVR_SHA" ] && [ -n "$STB" ] ||
-  { echo "can't read the openvr and stb pins from frametop/scripts/openvr.sh and frametop/hands/rec/build.sh" >&2; exit 1; }
+  { echo "can't read the openvr and stb pins from $fr (scripts/openvr.sh, scripts/stb.sh)" >&2; exit 1; }
 
-echo "== sources: frametop $(git -C "$root/frametop" describe --always --tags --dirty 2>/dev/null || echo unknown)"
+echo "== sources: frametop $(git -C "$fr" describe --always --tags --dirty 2>/dev/null || echo unknown)"
 mkdir -p "$src"
 # Everything but the build outputs (build/ keeps ncnn's build between runs)
-tar -C "$root/frametop/hands" --exclude=./build --exclude=./rec/build --exclude='__pycache__' -cf - . | tar -C "$src" -xf -
+tar -C "$fr/hands" --exclude=./build --exclude=./rec/build --exclude='__pycache__' -cf - . | tar -C "$src" -xf -
+
+# The headers outside hands/ that hands/ includes ("../../../screens/glyphs.h"), and what they
+# include in turn, each to the same path under $out as under Frametop, so those includes find
+# them. An include that isn't a file there (openvr.h, stb, a -I one) is left to the compiler.
+shared=()
+queue=()
+while IFS= read -r f; do queue+=("$f"); done < <(cd "$fr" && find hands -type f \( -name '*.c' -o -name '*.cc' \
+  -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -not -path 'hands/build/*' -not -path 'hands/rec/build/*')
+while ((${#queue[@]})); do
+  f=${queue[0]}
+  queue=("${queue[@]:1}")
+  while IFS= read -r inc; do
+    path=$(realpath -m --relative-to="$fr" "$fr/$(dirname "$f")/$inc")
+    case $path in hands/* | ../*) continue ;; esac
+    [ -f "$fr/$path" ] || continue
+    case " ${shared[*]} " in *" $path "*) continue ;; esac
+    shared+=("$path")
+    queue+=("$path")
+    mkdir -p "$out/$(dirname "$path")"
+    cp "$fr/$path" "$out/$path"
+  done < <(sed -n 's/^[[:space:]]*#[[:space:]]*include[[:space:]]*"\([^"]*\)".*/\1/p' "$fr/$f")
+done
+echo "== shared headers: ${shared[*]:-none}"
 
 echo "== jsoncpp $JSONCPP_TAG"
 if [ ! -f "$deps/jsoncpp/lib/libjsoncpp.a" ]; then

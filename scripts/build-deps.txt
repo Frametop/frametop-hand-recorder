@@ -1,5 +1,5 @@
-build-essential
 binutils
+build-essential
 ca-certificates
 cmake
 curl
@@ -10,4 +10,5 @@ libgbm-dev
 ninja-build
 pkg-config
 python3
+unzip
 zstd

@@ -4,6 +4,7 @@
 # run it through frame-job:
 #   frame-job --local -- scripts/build-in-container.sh            binaries in build/hands/
 #   frame-job --local -- scripts/build-in-container.sh --package  plus dist/ (scripts/package.sh)
+#   FRAMETOP=~/frametop frame-job --local -- scripts/build-in-container.sh   against that checkout
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 image=localhost/frametop-hand-recorder-build:24.04
@@ -14,4 +15,7 @@ fi
 cmd=scripts/build.sh
 [ "${1:-}" = --package ] && cmd="scripts/build.sh && scripts/package.sh"
 # Rootless podman: root in the container is this user outside, so the files stay ours.
-exec podman run --rm -v "$root:/src" -w /src -e JOBS="${JOBS:-}" "$image" bash -c "git config --global --add safe.directory '*' && $cmd"
+# FRAMETOP=DIR (scripts/build.sh): that checkout, read-only, at /frametop.
+other=()
+[ -z "${FRAMETOP:-}" ] || other=(-v "$(cd "$FRAMETOP" && pwd):/frametop:ro" -e FRAMETOP=/frametop)
+exec podman run --rm -v "$root:/src" "${other[@]}" -w /src -e JOBS="${JOBS:-}" "$image" bash -c "git config --global --add safe.directory '*' && $cmd"
