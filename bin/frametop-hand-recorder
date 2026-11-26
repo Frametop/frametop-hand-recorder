@@ -65,4 +65,7 @@ if [ -n "${FT_HANDREC_SCALE:-}" ]; then
 elif [ $plasma = 1 ] && [ -z "${QT_SCALE_FACTOR:-}" ]; then
   export QT_SCALE_FACTOR=0.85
 fi
-exec "$venv/bin/python" "$hands/rec/ft_handrec.py" --qml "$tree/app/main.qml" --style Basic "$@"
+# Frametop's hands/rec and recorder are packages (hands.rec.*): their tree goes on the path, and -P keeps
+# hands/rec itself off it. By path, not -m, so get-hand-recorder.sh's pgrep finds a running window.
+PYTHONPATH="$(dirname "$hands")${PYTHONPATH:+:$PYTHONPATH}" \
+  exec "$venv/bin/python" -P "$hands/rec/ft_handrec.py" --qml "$tree/app/main.qml" --style Basic "$@"

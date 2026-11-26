@@ -26,10 +26,9 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # FT_HANDREC_FRAMETOP: a Frametop checkout to shoot instead of the submodule (a branch, before
 # the submodule moves to it).
-REC = os.path.join(os.environ.get("FT_HANDREC_FRAMETOP") or os.path.join(ROOT, "frametop"), "hands", "rec")
+FRAMETOP = os.environ.get("FT_HANDREC_FRAMETOP") or os.path.join(ROOT, "frametop")
 QML = os.path.join(ROOT, "app", "main.qml")
-sys.path.insert(0, REC)
-sys.path.insert(0, os.path.join(REC, "tests"))
+sys.path.insert(0, FRAMETOP)   # its hands/rec and recorder are packages: hands.rec.session, recorder.*
 
 SESSION_A = "20261002-101500"   # exported, with a deleted range
 SESSION_B = "20261003-184200"   # not exported
@@ -44,9 +43,9 @@ REAL_BASE = os.path.realpath(os.path.expanduser("~/.local/share/frametop/hands/c
 def make_safe():
     """Stub out everything in the session module that runs host commands or starts units, so
     a slip (Restart SteamVR, the light check's ft-camd start) runs nothing."""
-    import ft_handrec
-    import session
-    import takes
+    from hands.rec import ft_handrec
+    from hands.rec import session
+    from hands.rec import takes
 
     def refuse(*_a, **_k):
         raise RuntimeError("test: not started")
@@ -71,7 +70,7 @@ def make_safe():
 
 
 FREE = {"bytes": 120 * 1000 ** 3}
-BOUNTY = "close-up"   # the bounty the shots pick (a live one on the shipped board)
+BOUNTY = "everyday-taps"   # the bounty the shots pick (a live one on the shipped board; close-up is retired)
 
 
 class DummySession:
@@ -110,8 +109,8 @@ class Shooter:
 
     # --- the window
     def load(self, base, start_page=""):
-        import ft_handrec
-        import takes
+        from hands.rec import ft_handrec
+        from hands.rec import takes
         from PySide6.QtCore import QUrl
         from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine
         store = takes.Store(base)
@@ -321,8 +320,8 @@ class Shooter:
 def seed(base):
     """Two recorded sessions (test_validate.make_session), the first with a deleted range and
     exported."""
-    import takes
-    import test_validate
+    from hands.rec import takes
+    from hands.rec.tests import test_validate
     contributor = test_validate.make_session(base, sid=SESSION_A)
     test_validate.make_session(base, contributor=contributor, sid=SESSION_B)
     store = takes.Store(base)
@@ -346,9 +345,9 @@ def fake_status(**kw):
 
 def session_states(s):
     """Made-up session states, the fullest the page has to fit (no session runs)."""
-    import session
+    from hands.rec import session
     b = s.backend
-    poses = os.path.join(REC, "poses")
+    poses = os.path.join(FRAMETOP, "hands", "rec", "poses")
     b._session = DummySession()
     states = [
         ("session-ready", fake_status(
@@ -465,7 +464,7 @@ def free_space_states(s, b):
     """Freeing space (2026-10-17): SESSION_A uploaded, an earlier upload whose local copy is gone,
     and the disk too full for a round."""
     import datetime
-    import takes
+    from hands.rec import takes
     from recorder import contributions
     store = takes.Store(b.store.base)
     meta_path = os.path.join(store.session_dir(SESSION_A), "session.json")

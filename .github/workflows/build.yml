@@ -42,12 +42,14 @@ jobs:
 
       - name: Frametop's recorder tests (standard library, and cryptography for the encrypted exports)
         run: |
-          for t in frametop/hands/rec/tests/test_session.py frametop/hands/rec/tests/test_validate.py \
-                   frametop/hands/rec/tests/test_sides.py frametop/hands/rec/tests/test_nohands.py \
-                   frametop/hands/rec/tests/test_bounties.py frametop/hands/rec/tests/test_debug.py \
-                   frametop/recorder/tests/test_age.py frametop/recorder/tests/test_bounties.py \
-                   frametop/hands/tests/test_camcheck.py; do
-            echo "== $t"; python3 "$t"
+          # hands/rec and recorder are packages (Frametop's DEE-319): run as modules from its tree
+          cd frametop
+          for t in hands.rec.tests.test_session hands.rec.tests.test_validate \
+                   hands.rec.tests.test_sides hands.rec.tests.test_nohands \
+                   hands.rec.tests.test_bounties hands.rec.tests.test_debug \
+                   recorder.tests.test_age recorder.tests.test_bounties \
+                   hands.tests.test_camcheck; do
+            echo "== $t"; python3 -m "$t"
           done
 
       - name: The window's tests (PySide6 from requirements.txt)
@@ -57,7 +59,7 @@ jobs:
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -q --disable-pip-version-check --require-hashes --only-binary=:all: -r requirements.txt
-          FT_HANDREC_QML=$PWD/app/main.qml .venv/bin/python frametop/hands/rec/tests/test_qml_backend.py
+          (cd frametop && FT_HANDREC_QML=$PWD/../app/main.qml ../.venv/bin/python -m hands.rec.tests.test_qml_backend)
           .venv/bin/python -m unittest discover -s tests -v
 
       - name: Installer syntax

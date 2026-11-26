@@ -79,7 +79,7 @@ frame-job --local -- scripts/build-in-container.sh --package   # and the release
 Leave out `frame-job --local --` on a machine without frame-job.
 
 - **The window in a dry run:** `bin/frametop-hand-recorder --dry-run --hub-dry-run --base /tmp/hr`. Sessions start no processes, and Upload makes no network calls.
-- **Tests:** `QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests`, and `FT_HANDREC_QML=$PWD/app/main.qml .venv/bin/python frametop/hands/rec/tests/test_qml_backend.py`. The second checks every backend property and slot the window uses.
+- **Tests:** `QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests`, and `(cd frametop && FT_HANDREC_QML=$PWD/../app/main.qml ../.venv/bin/python -m hands.rec.tests.test_qml_backend)`. The second checks every backend property and slot the window uses.
 - **Installing a local build:** `./get-hand-recorder.sh --from dist/frametop-hand-recorder-*-aarch64.tar.gz`.
 - **The dashboard spike:** `spike/install.sh` adds "Hand Recorder spike" and "Hand Recorder (dev, dry run)" to Launch a program, and `spike/install.sh --remove` takes them away. The spike logs what it sees to `~/.local/state/frametop-hand-recorder/spike.log`: clicks, scrolling, keyboard text, the browser, the clipboard, the headset panel with the dashboard closed, the headset button, and the sleep block.
 - **Python pins:** edit `requirements.in`, then run `scripts/lock-requirements.sh` on the Frame.
