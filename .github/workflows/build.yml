@@ -42,11 +42,12 @@ jobs:
 
       - name: Frametop's recorder tests (standard library, and cryptography for the encrypted exports)
         run: |
-          # hands/rec and recorder are packages (Frametop's DEE-319): run as modules from its tree
+          # hands/rec and recorder are packages (since Frametop's package move): run as modules from its tree
           cd frametop
           for t in hands.rec.tests.test_session hands.rec.tests.test_validate \
                    hands.rec.tests.test_sides hands.rec.tests.test_nohands \
                    hands.rec.tests.test_bounties hands.rec.tests.test_debug \
+                   hands.rec.tests.test_handsneeded hands.rec.tests.test_requested_rounds \
                    recorder.tests.test_age recorder.tests.test_bounties \
                    hands.tests.test_camcheck; do
             echo "== $t"; python3 -m "$t"
@@ -67,6 +68,12 @@ jobs:
 
       - name: Package
         run: scripts/package.sh
+
+      - name: The package imports what it runs (only its own tree on the path, as the launcher has it)
+        run: |
+          tree=$(mktemp -d)
+          tar -C "$tree" -xzf dist/frametop-hand-recorder-*.tar.gz --strip-components=1
+          PYTHONPATH=$tree .venv/bin/python -P -c "import hands.rec.session, hands.rec.hub, hands.rec.validate, hands.rec.takes, hands.rec.handsneeded, hands.rec.ft_handrec, recorder.window"
 
       - uses: actions/upload-artifact@v7
         with:

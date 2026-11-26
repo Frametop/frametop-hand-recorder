@@ -55,6 +55,8 @@ done
 for f in "$root"/frametop/recorder/*.py; do
   put 644 "$f" "recorder/$(basename "$f")"
 done
+# Frametop's settings reader, which hands/rec/session.py imports (conf.ft_conf: standard library only)
+put 644 "$root/frametop/conf/ft_conf.py" conf/ft_conf.py
 put 644 "$ft/rec/poses/poses.json" hands/rec/poses/poses.json
 for f in "$ft"/rec/poses/*.png; do
   [ "$(basename "$f")" = contact-sheet.png ] || put 644 "$f" "hands/rec/poses/$(basename "$f")"

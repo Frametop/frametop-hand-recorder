@@ -24,8 +24,8 @@ from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "frametop", "hands", "rec"))
-import session  # noqa: E402  (the headset button reader)
+sys.path.insert(0, os.path.join(ROOT, "frametop"))   # Frametop's tree: hands.rec is a package
+from hands.rec import session  # noqa: E402  (the headset button reader)
 
 LOG = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"),
                    "frametop-hand-recorder", "spike.log")
